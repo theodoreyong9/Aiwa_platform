@@ -1,6 +1,6 @@
 // The one real check both guarded stores in this package share: does
-// `capabilities` (a real, already-verified CapabilitySet — see
-// @aiwa/record's own capability.js) actually cover this action on this
+// `capabilities` (a real, already-verified CapabilitySet — see this
+// package's own capability.js) actually cover this action on this
 // resource? A real, honest refusal on anything else, never a silent
 // partial write.
 

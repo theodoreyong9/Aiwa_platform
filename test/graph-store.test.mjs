@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateIdentity, EventLog, issueCapability, verifyCapability, CapabilitySet } from '@aiwa/record';
+import { generateIdentity, EventLog } from 'aiwa-core';
+import { issueCapability, verifyCapability, CapabilitySet } from '../src/capability.js';
 import { GraphStore } from '../src/graph-store.js';
 import { ref, isRef } from '../src/graph-materializer.js';
 

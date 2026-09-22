@@ -1,29 +1,28 @@
 # aiwa-platform
 
-Distributed infrastructure: transport, replication, permissions,
-storage, and a graph-shaped data store. Builds entirely on
-[`@aiwa/record`](https://github.com/theodoreyong9/record) — this
-package adds only what Record doesn't already provide.
+Distributed infrastructure: transport, replication, permissions, and a
+graph-shaped data store. Depends on [`aiwa-core`](https://github.com/theodoreyong9/Aiwa_core)
+for the event/identity/storage substrate (`EventLog`, `Identity`,
+`DataStore`) — the sibling repo in this stack, not an outside project.
 
-## What Record already covers (re-exported, not reimplemented)
+## What this package owns
 
-Record's own `transport.js`, `replicator.js`, and `capability.js`
-already are this portfolio's transports/replication/permissions layer:
-`TrysteroTransport`/`LoopbackTransport`, a real HELLO/EVENTS/ACK
-`Replicator`, and a signed, scoped `CapabilitySet`. `EventLog` (with a
-memory or IndexedDB backend) is the storage layer. This package
-re-exports all of it from its own `index.js` rather than wrapping or
-forking it — a "sphere" in this stack is simply an `@aiwa/record`
-`domain`; nothing new was needed to represent one.
-
-## What's genuinely new here
-
-- **`GuardedDataStore`** — wires Record's own `CapabilitySet` into the
-  one real choke point every write already passes through
+- **`transport.js`** — `TrysteroTransport`/`LoopbackTransport`, a real,
+  minimal five-method transport contract (`connect`/`disconnect`/`peers`/
+  `send`/`broadcast` plus join/leave/message handlers). Knows nothing
+  about events, domains, or identity — only real bytes to real peers.
+- **`replicator.js`** — a real HELLO/EVENTS/ACK sync protocol: on
+  connect, exchange heads; send only the real, minimal missing set
+  (via `EventLog.since()`), never a full history dump.
+- **`capability.js`** — a signed, scoped `CapabilitySet`: an
+  application never receives "access to everything," only what was
+  genuinely, verifiably issued to it.
+- **`GuardedDataStore`** — wires `capability.js`'s own `CapabilitySet`
+  into the one real choke point every write already passes through
   (`DataStore._commit`, which `set`/`delete`/`transact` all call).
-  Record's capability primitive is real and tested but enforces
-  nothing on its own; this is that enforcement.
-- **`GraphStore`** — a nested/graph-shaped alternative to Record's
+  `capability.js` is a real, tested primitive that enforces nothing on
+  its own; this is that enforcement.
+- **`GraphStore`** — a nested/graph-shaped alternative to `aiwa-core`'s
   flat-KV `DataStore`: many fields per node, where a field's value can
   be a real reference (`ref(nodeId)`) to another node, resolved on
   read (`store.get(node, field)`), never eagerly denormalized. Built
@@ -34,6 +33,18 @@ forking it — a "sphere" in this stack is simply an `@aiwa/record`
   match plain `DataStore`'s own behavior. `transact()` is refused
   outright rather than silently producing kv-shaped sub-events this
   store's own materializer would never recognize.
+
+A "sphere" in this stack is simply an `aiwa-core` `domain` — nothing
+new was needed to represent one.
+
+## Where this package's own code came from
+
+`transport.js`, `replicator.js`, and `capability.js` started as a
+direct copy of [`theodoreyong9/record`](https://github.com/theodoreyong9/record)
+— an existing, tested foundation elsewhere in this portfolio, used as
+a reference rather than reinvented from scratch. Record is not one of
+this stack's own repos, so its code lives here as this package's own
+files, not as a live dependency.
 
 ## Why "graph," not "GUN-compatible"
 
@@ -51,15 +62,14 @@ compatibility shimming for a dependency that isn't in use.
 
 ## Honest limits
 
-`TrysteroTransport` (re-exported from Record) has never been
-exercised with two real, live browser tabs in this session — the
-identical limit Record's own README already states for it.
+`TrysteroTransport` has never been exercised with two real, live
+browser tabs in this session — the identical limit stated for it
+wherever this code has lived before.
 
 ## Status
 
-21 passing `node --test` cases for this package's own new code.
-Depends on `@aiwa/record` via its GitHub URL (neither package is on
-npm yet).
+21 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+URL (neither is on npm yet).
 
 ## Testing
 

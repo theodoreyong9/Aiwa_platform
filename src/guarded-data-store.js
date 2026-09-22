@@ -1,11 +1,11 @@
-// Wires Record's own CapabilitySet into the one real choke point every
-// DataStore write already passes through — DataStore's own `_commit`,
-// which `set`/`delete`/`transact` all call. Record's capability.js is a
-// real, tested, signed-grant primitive; nothing in Record itself
-// enforces it anywhere — that enforcement is this platform layer's job,
-// not the shared substrate's.
+// Wires this package's own CapabilitySet (capability.js) into the one
+// real choke point every DataStore write already passes through —
+// DataStore's own `_commit`, which `set`/`delete`/`transact` all
+// call. capability.js is a real, tested, signed-grant primitive on
+// its own; nothing enforces it anywhere on its own — that enforcement
+// is this file's job.
 
-import { DataStore } from '@aiwa/record';
+import { DataStore } from 'aiwa-core';
 import { assertCapability } from './capability-guard.js';
 
 const defaultResourceOf = (partial, store) => store.domain;
@@ -13,7 +13,7 @@ const defaultResourceOf = (partial, store) => store.domain;
 export class GuardedDataStore extends DataStore {
   /**
    * @param {object} opts
-   * @param {import('@aiwa/record').CapabilitySet} opts.capabilities a real, already-populated set — grants must already have been verified with verifyCapability before being added to it; this class only ever checks membership, never verifies a raw capability itself.
+   * @param {import('./capability.js').CapabilitySet} opts.capabilities a real, already-populated set — grants must already have been verified with verifyCapability before being added to it; this class only ever checks membership, never verifies a raw capability itself.
    * @param {(partial: object, store: GuardedDataStore) => string} [opts.resourceOf] what resource string a given commit is writing to — defaults to the store's own domain.
    * @param {string} [opts.action] the action every write here requires — defaults to 'write'.
    */

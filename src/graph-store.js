@@ -1,5 +1,5 @@
 // A real, nested/graph-shaped DataStore — same real source-of-truth
-// split as @aiwa/record's own DataStore (a rebuildable projection over
+// split as aiwa-core's own DataStore (a rebuildable projection over
 // the real EventLog, never itself the source of truth), just with
 // graphMaterializer.js's own node/field/reference shape instead of
 // flat key-value. `get`/`has`/`node` intentionally shadow the parent
@@ -9,7 +9,7 @@
 // silently producing kv-shaped sub-events this store's own materializer
 // would never recognize.
 
-import { DataStore } from '@aiwa/record';
+import { DataStore } from 'aiwa-core';
 import { graphMaterializer, isRef } from './graph-materializer.js';
 import { assertCapability } from './capability-guard.js';
 
@@ -18,7 +18,7 @@ const defaultResourceOf = (partial, store) => `${store.domain}:${partial.payload
 export class GraphStore extends DataStore {
   /**
    * @param {object} opts
-   * @param {import('@aiwa/record').CapabilitySet} [opts.capabilities] optional — omit for an ungated store (matches plain DataStore's own default), pass to require a real, granted capability on every real write.
+   * @param {import('./capability.js').CapabilitySet} [opts.capabilities] optional — omit for an ungated store (matches plain DataStore's own default), pass to require a real, granted capability on every real write.
    * @param {(partial: object, store: GraphStore) => string} [opts.resourceOf] defaults to `${domain}:${node}.${field}`.
    * @param {string} [opts.action] defaults to 'write'.
    */
