@@ -159,19 +159,59 @@ what "graph" in the platform's own charter actually means — genuinely
 nested, reference-capable data — not as compatibility shimming for a
 dependency that isn't in use.
 
+### `test-browser/sandbox.html` — a real WebRTC connection, two real tabs
+
+`RTCPeerConnection` doesn't exist in Node, so `webrtc-transport.test.mjs`
+(above) only covers this class's own real bookkeeping and validation
+logic against a minimal, deliberately fake `RTCPeerConnection` — not the
+real network path. `sandbox.html` closes that gap: it exposes this
+package's real building blocks (`WebrtcTransport`, `Replicator`, plus
+`aiwa-core`'s `EventLog`/`generateIdentity`/`createEvent`) as
+`window.aiwa.*` globals on a generic page, so two genuinely separate
+browser tabs can be driven — by Playwright, or by hand in devtools — through
+a real offer/answer/complete handshake with the resulting blobs passed
+between them exactly as a real deployment would (pasted text, a QR code —
+this class never picks the channel itself).
+
+```
+python3 -m http.server 8935   # from this repo's own root
+```
+then open `test-browser/sandbox.html` in two separate tabs and, in each
+tab's devtools console, set up an identity/log/transport/replicator and
+carry out the real offer → answer → complete exchange by copying each
+blob to the other tab.
+
+**Real, measured result** (Playwright + real Chromium, two real, separate
+browser contexts, run in this environment): a genuine `RTCPeerConnection`
+data channel opened between two real tabs with zero relay or signaling
+server, and `Replicator` correctly synced both a pre-existing event (via
+the initial HELLO handshake) and a live, newly-published event across it.
+
+**A real bug this run found and fixed**: the first attempt hung
+indefinitely at `createOfferFor` — `waitForIceGatheringComplete` waited
+unboundedly for `iceGatheringState === 'complete'`, but this sandbox's
+network policy blocks STUN (UDP) traffic outright, so the server-reflexive
+candidate never resolves and gathering never reaches `'complete'` on its
+own. Fixed by bounding the wait with a real timeout (`iceGatheringTimeoutMs`,
+default 3000ms): send the offer/answer with whatever candidates (host,
+and srflx if it arrived in time) were gathered, rather than waiting
+forever for one that may never come. This isn't a workaround specific to
+this sandbox — restrictive firewalls in real deployments hit the same
+failure mode, so a bounded wait is the correct behavior in general.
+Regression-tested in `webrtc-transport.test.mjs` against a fake PC whose
+`iceGatheringState` never reaches `'complete'`.
+
 ## Honest limits
 
-`RTCPeerConnection` doesn't exist in Node, so `webrtc-transport.js`'s
-own real network path (ICE negotiation, real SDP, real data flow) has
-no meaningful automated test here — `webrtc-transport.test.mjs` covers
-this class's own real connection bookkeeping and validation logic
-against a minimal, deliberately fake `RTCPeerConnection`, not the real
-network path. Not yet exercised with two real, live browser tabs in
-this session.
+The real, two-tab WebRTC path above was exercised only on the same
+machine (loopback, host candidates) — genuine NAT traversal across two
+different networks (a real srflx/STUN or relay/TURN path) has not been
+tested, since this sandbox's own network policy blocks the STUN traffic
+that would be needed to exercise it.
 
 ## Status
 
-52 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+54 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing

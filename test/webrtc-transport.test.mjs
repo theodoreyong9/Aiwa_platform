@@ -205,3 +205,44 @@ test('disconnect() closes every real link, pending and open, and clears all stat
   assert.equal(pcs[0].closed, true);
   assert.equal(pcs[1].closed, true);
 });
+
+// Regression test for a real bug found via two genuinely separate,
+// live browser tabs (Playwright + real Chromium): when STUN traffic is
+// blocked (as it is in some sandboxed/firewalled networks),
+// iceGatheringState never reaches 'complete' on its own, and an
+// unbounded wait hangs forever. createOfferFor/acceptOffer must still
+// resolve — with whatever candidates were gathered in time — rather
+// than block indefinitely.
+class StuckPeerConnection extends FakePeerConnection {
+  constructor() {
+    super();
+    this.iceGatheringState = 'gathering'; // never reaches 'complete'
+  }
+  addEventListener() {} // no event will ever fire — only the timeout can resolve this
+}
+
+test('createOfferFor resolves via its timeout when ICE gathering never reaches complete', async () => {
+  const transport = new WebrtcTransport({
+    selfId: 'self',
+    iceGatheringTimeoutMs: 20,
+    createPeerConnection: () => new StuckPeerConnection(),
+  });
+  const start = Date.now();
+  const blob = await transport.createOfferFor('bob');
+  assert.ok(Date.now() - start < 2000, 'must resolve via the bounded timeout, not hang');
+  assert.equal(decodeSignal(blob).kind, 'offer');
+});
+
+test('acceptOffer resolves via its timeout when ICE gathering never reaches complete', async () => {
+  const { transport: offerer } = makeTransport('alice');
+  const offerBlob = await offerer.createOfferFor('bob');
+  const transport = new WebrtcTransport({
+    selfId: 'bob',
+    iceGatheringTimeoutMs: 20,
+    createPeerConnection: () => new StuckPeerConnection(),
+  });
+  const start = Date.now();
+  const answerBlob = await transport.acceptOffer(offerBlob);
+  assert.ok(Date.now() - start < 2000, 'must resolve via the bounded timeout, not hang');
+  assert.equal(decodeSignal(answerBlob).kind, 'answer');
+});

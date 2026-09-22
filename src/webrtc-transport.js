@@ -21,22 +21,41 @@
 // meaningful test here — see webrtc-transport.test.mjs for what IS
 // genuinely covered (this class's own connection bookkeeping and
 // validation, against a minimal, deliberately fake PC) and what isn't.
-// Not yet exercised with two real, live browser tabs in this session.
+//
+// Verified with two real, separate browser tabs (Playwright, real
+// Chromium, real RTCPeerConnection) in this environment: full ICE
+// gathering (waiting for iceGatheringState === 'complete') hung
+// indefinitely — STUN traffic (UDP) appears to be blocked by this
+// sandbox's network policy, so the srflx candidate never resolves and
+// gathering never reaches 'complete' on its own. `waitForIceGatheringComplete`
+// is bounded by a real timeout for exactly this reason: send the offer/answer
+// with whatever candidates (host, and srflx if it arrived) were gathered
+// in time, rather than waiting forever for one that may never come. This
+// is not a workaround specific to this sandbox — real deployments hit the
+// same failure mode against restrictive firewalls, so a bounded wait is
+// the correct behavior in general, not just here.
 
 import { encodeSignal, decodeSignal } from './signaling-codec.js';
 
 const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+const DEFAULT_ICE_GATHERING_TIMEOUT_MS = 3000;
 
-function waitForIceGatheringComplete(pc) {
+function waitForIceGatheringComplete(pc, timeoutMs = DEFAULT_ICE_GATHERING_TIMEOUT_MS) {
   if (pc.iceGatheringState === 'complete') return Promise.resolve();
   return new Promise((resolve) => {
+    let settled = false;
+    function finish() {
+      if (settled) return;
+      settled = true;
+      pc.removeEventListener('icegatheringstatechange', check);
+      clearTimeout(timer);
+      resolve();
+    }
     function check() {
-      if (pc.iceGatheringState === 'complete') {
-        pc.removeEventListener('icegatheringstatechange', check);
-        resolve();
-      }
+      if (pc.iceGatheringState === 'complete') finish();
     }
     pc.addEventListener('icegatheringstatechange', check);
+    const timer = setTimeout(finish, timeoutMs);
   });
 }
 
@@ -45,11 +64,13 @@ export class WebrtcTransport {
     selfId = crypto.randomUUID(),
     iceServers = DEFAULT_ICE_SERVERS,
     dataChannelLabel = 'aiwa-platform',
+    iceGatheringTimeoutMs = DEFAULT_ICE_GATHERING_TIMEOUT_MS,
     createPeerConnection = (config) => new RTCPeerConnection(config),
   } = {}) {
     this.selfId = selfId;
     this._iceServers = iceServers;
     this._dataChannelLabel = dataChannelLabel;
+    this._iceGatheringTimeoutMs = iceGatheringTimeoutMs;
     this._createPeerConnection = createPeerConnection;
     this._links = new Map(); // peerId -> { pc, channel } — both pending (not yet open) and open connections
     this._openPeers = new Set(); // the subset of _links whose channel has genuinely opened
@@ -112,7 +133,7 @@ export class WebrtcTransport {
     this._wireChannel(remotePeerId, pc, channel);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await waitForIceGatheringComplete(pc);
+    await waitForIceGatheringComplete(pc, this._iceGatheringTimeoutMs);
     return encodeSignal('offer', this.selfId, pc.localDescription.sdp);
   }
 
@@ -132,7 +153,7 @@ export class WebrtcTransport {
     await pc.setRemoteDescription({ type: 'offer', sdp: decoded.sdp });
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await waitForIceGatheringComplete(pc);
+    await waitForIceGatheringComplete(pc, this._iceGatheringTimeoutMs);
     return encodeSignal('answer', this.selfId, pc.localDescription.sdp);
   }
 

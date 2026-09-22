@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>aiwa-platform sandbox</title>
+<script type="importmap">
+{ "imports": {
+  "aiwa-core": "/node_modules/aiwa-core/src/index.js",
+  "@noble/curves/ed25519.js": "/node_modules/@noble/curves/ed25519.js",
+  "@noble/hashes/utils.js": "/node_modules/@noble/hashes/utils.js",
+  "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js"
+} }
+</script>
+</head>
+<body>
+<!--
+  A generic sandbox exposing this package's own real building blocks
+  as window globals, so a driver (Playwright, or a person in devtools)
+  can orchestrate a real, live, multi-peer scenario by hand — e.g. a
+  real WebrtcTransport connection between two real tabs, with a real
+  Replicator syncing real events over it. See
+  test-browser/verify-p2p-sync.mjs for the real, driven example.
+-->
+<pre id="log"></pre>
+<script type="module">
+  import { EventLog, DataStore, generateIdentity, createEvent } from 'aiwa-core';
+  import { WebrtcTransport, Replicator, LoopbackTransport } from '../src/index.js';
+  window.aiwa = { EventLog, DataStore, generateIdentity, createEvent, WebrtcTransport, Replicator, LoopbackTransport };
+  window.__ready = true;
+</script>
+</body>
+</html>
