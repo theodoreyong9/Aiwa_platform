@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>aiwa-platform: a real service worker serving a real bundle</title>
+<script type="importmap">
+{ "imports": {
+  "aiwa-core": "/node_modules/aiwa-core/src/index.js",
+  "@noble/curves/ed25519.js": "/node_modules/@noble/curves/ed25519.js",
+  "@noble/hashes/utils.js": "/node_modules/@noble/hashes/utils.js",
+  "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js"
+} }
+</script>
+</head>
+<body>
+<!--
+  The real proof that a browser can actually RUN a reconstructed
+  bundle, not just reconstruct it in memory: publishes Jobber's real
+  bundle into a real IndexedDB backend, registers a real service
+  worker (app-sw.js) whose fetch handler is this package's own real
+  createFetchHandler (see generate-sw-bundle.mjs for the one, disclosed
+  adaptation this needed). A service worker only intercepts requests
+  from a client it actually controls (or a navigation request itself,
+  which is scope-checked directly) — so THIS page (outside the
+  worker's own scope) only registers it; the actual proof is the
+  Playwright driver then navigating straight to a URL under
+  '/test-browser/app/' — a prefix that corresponds to no real file on
+  this static server, so a successful real page load there can only be
+  explained by the service worker having intercepted the navigation
+  and served it from the real, IndexedDB-reconstructed bundle.
+
+  python3 -m http.server 8935   # from this repo's own root
+  node test-browser/generate-sw-bundle.mjs
+  then open ?phase=publish, then ?phase=register, then navigate to
+  /test-browser/app/index.html directly.
+-->
+<pre id="result">running...</pre>
+<script type="module">
+  import { EventLog, createIndexedDbBackend, generateIdentity } from 'aiwa-core';
+  import { publishBundle } from '../src/bundle.js';
+
+  const resultEl = document.getElementById('result');
+  const phase = new URLSearchParams(location.search).get('phase') || 'publish';
+  const DB_NAME = 'aiwa-platform-jobber-sw-check';
+
+  async function run() {
+    if (phase === 'publish') {
+      const backend = createIndexedDbBackend(DB_NAME);
+      const log = new EventLog(backend);
+      const files = await fetch('./jobber-fixture.json').then((r) => r.json());
+      const identity = await generateIdentity();
+      const { manifestEventId } = await publishBundle(identity, log, 'jobber', { name: 'jobber', version: '1.0.0', files });
+      window.__result = { phase: 'publish', manifestEventId, fileCount: files.length };
+    } else if (phase === 'register') {
+      const registration = await navigator.serviceWorker.register('./app-sw.js', { type: 'module', scope: '/test-browser/app/' });
+      const worker = registration.installing || registration.waiting || registration.active;
+      await new Promise((resolve) => {
+        if (worker.state === 'activated') return resolve();
+        worker.addEventListener('statechange', () => { if (worker.state === 'activated') resolve(); });
+      });
+      window.__result = { phase: 'register', scope: registration.scope, workerState: worker.state };
+    }
+    resultEl.textContent = JSON.stringify(window.__result, null, 2);
+    window.__done = true;
+  }
+
+  run().catch((err) => {
+    window.__result = { error: String((err && err.stack) || err) };
+    resultEl.textContent = JSON.stringify(window.__result, null, 2);
+    window.__done = true;
+  });
+</script>
+</body>
+</html>

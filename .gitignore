@@ -1,2 +1,4 @@
 node_modules/
 test-browser/jobber-fixture.json
+test-browser/bundle.for-sw.js
+test-browser/serve-worker.for-sw.js

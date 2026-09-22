@@ -57,6 +57,13 @@ for the event/identity/storage substrate (`EventLog`, `Identity`,
   `latestBundle` reconstruct a full, byte-for-byte-verified bundle
   from a manifest — every event involved was already cryptographically
   verified on `EventLog.append()`, this only reassembles.
+- **`serve-worker.js`** — the piece that turns "a bundle was published
+  and can be reconstructed" into "a browser can actually run it": a
+  real service worker fetch handler (`createFetchHandler`) that
+  intercepts requests under a given scope and serves them from
+  `latestBundle`'s real, IndexedDB-reconstructed content, instead of
+  the network. See `test-browser/sw-serve-check.html` below for the
+  real, live proof.
 
 A "sphere" in this stack is simply an `aiwa-core` `domain` — nothing
 new was needed to represent one.
@@ -83,20 +90,17 @@ the new manifest — never the 35 unchanged files again.
 real and correct against a genuine, non-toy application, not a
 synthetic fixture.
 
-**What this does NOT yet prove** (the next real steps, not done here):
-- How a browser actually *serves and runs* a reconstructed bundle — a
-  service worker reading from an EventLog-backed cache is the likely
-  shape (the same pattern this portfolio's existing PWA service
-  workers already use for offline caching, just sourcing content from
-  AIWA-synced events instead of a `fetch()` to an origin server), but
-  it isn't built yet.
+**What this does NOT yet prove** (the next real step, not done here):
 - How a brand-new peer with zero existing connections bootstraps its
   very first contact with no fixed hosting at all — a real, physical
   constraint (a browser can't run code it hasn't fetched from
   *somewhere*), deliberately deferred rather than hand-waved.
 
-Actual peer-to-peer replication between two separate, real browser
-tabs is no longer on this list — see `test-browser/sandbox.html` below.
+Two items that used to be on this list no longer are: actual
+peer-to-peer replication between two separate, real browser tabs (see
+`test-browser/sandbox.html` below), and how a browser actually *serves
+and runs* a reconstructed bundle (see `test-browser/sw-serve-check.html`
+below).
 
 ### `test-browser/publish-durability.html` — the same proof, but durable
 
@@ -127,6 +131,63 @@ made `latestBundle()` throw a false "real fork" error on reload — see
 `aiwa-core`'s README for the bug and `test/bundle.test.mjs`'s dedicated
 regression test here for the exact scenario. Fixed upstream; this
 package's own `aiwa-core` dependency has been updated to the fix.
+
+### `test-browser/sw-serve-check.html` — a real browser actually running the bundle
+
+Everything above reconstructs a bundle *in a script*; this proves a
+real service worker can actually **serve** it, so an ordinary page
+navigation and its own subresource loads (`<script src>`, `fetch()`)
+work exactly as they would against a real origin server — with no
+origin server involved at all.
+
+`app-sw.js` registers `createFetchHandler({ domain: 'jobber', scope: '/test-browser/app/' })`
+(this package's own real function, unmodified) for that scope.
+`/test-browser/app/` corresponds to no real file anywhere on the
+static server, so a real page successfully loading there is only
+explainable by the service worker having intercepted the navigation
+and served it from `latestBundle`'s real, IndexedDB-reconstructed
+bundle.
+
+```
+node test-browser/generate-fixture.mjs /path/to/Jobber   # if not already generated
+node test-browser/generate-sw-bundle.mjs                  # writes the gitignored *.for-sw.js files
+python3 -m http.server 8935                               # from this repo's own root
+```
+then open `sw-serve-check.html?phase=publish`, then
+`?phase=register`, then navigate directly to
+`/test-browser/app/index.html`.
+
+**A real, confirmed browser constraint found building this**: a
+service worker's `register()` call rejects outright ("ServiceWorker
+script evaluation failed") on a bare `import ... from 'aiwa-core'` —
+unlike an ordinary page, a service worker does not inherit its
+registering page's `<script type="importmap">`, so the same technique
+`sandbox.html`/`publish-durability.html` use above doesn't carry over.
+A real npm consumer bundling their service worker with Vite/Webpack/
+esbuild/Rollup (the standard way real PWAs ship one) never hits this.
+`generate-sw-bundle.mjs` works around it, for this zero-build-step
+proof only, by pointing `serve-worker.js`'s and `bundle.js`'s own
+`'aiwa-core'` import at the *concrete* files that actually define what
+each one uses (`event-log.js`, `event.js`) rather than the package's
+`index.js` barrel — which re-exports the *entire* package, including
+`identity.js`'s `@noble/curves` and `solana-wallet.js`'s
+`@solana/web3.js`/`@scure/bip39`, none of which a bare-specifier-free
+worker could load anyway and none of which this service worker needs.
+Every line of actual logic is untouched; only which file the one
+import resolves to changes.
+
+Real, confirmed result: a genuine top-level navigation to
+`/test-browser/app/index.html` returned a real 200 with Jobber's real
+`index.html`, byte-for-byte identical to the source, and
+`navigator.serviceWorker.controller` was set (a real controlled
+client) — its own subsequent `fetch('/test-browser/app/js/app.js')`
+also came back 200 and byte-identical, and a path not in the bundle
+correctly got the service worker's own 404, not the static server's.
+Jobber's real page then went on to request its *other* real scripts
+and (for `.png`/font/CDN resources this fixture deliberately excludes,
+being `.html`/`.css`/`.js`-only) genuinely 404's on those — an honest
+reflection of the fixture's own scope, not a defect in
+`serve-worker.js` itself.
 
 ## Where this package's own code came from
 
@@ -219,7 +280,7 @@ that would be needed to exercise it.
 
 ## Status
 
-55 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+64 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing
