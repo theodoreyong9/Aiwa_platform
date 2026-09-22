@@ -7,7 +7,9 @@
 export { EventLog, createMemoryBackend, createIndexedDbBackend, DataStore, defaultKvMaterializer } from 'aiwa-core';
 export { generateIdentity, identityFromSecretKey, publicIdentity, deriveId, Identity, createEvent, verifyEvent } from 'aiwa-core';
 
-export { TrysteroTransport, LoopbackTransport } from './transport.js';
+export { LoopbackTransport } from './transport.js';
+export { WebrtcTransport } from './webrtc-transport.js';
+export { encodeSignal, decodeSignal } from './signaling-codec.js';
 export { Replicator } from './replicator.js';
 export { issueCapability, verifyCapability, capabilityAllows, CapabilitySet } from './capability.js';
 

@@ -7,10 +7,20 @@ for the event/identity/storage substrate (`EventLog`, `Identity`,
 
 ## What this package owns
 
-- **`transport.js`** — `TrysteroTransport`/`LoopbackTransport`, a real,
-  minimal five-method transport contract (`connect`/`disconnect`/`peers`/
-  `send`/`broadcast` plus join/leave/message handlers). Knows nothing
-  about events, domains, or identity — only real bytes to real peers.
+- **`webrtc-transport.js`** — `WebrtcTransport`: our own, relay-free
+  P2P transport. No Trystero, no Nostr relay, no signaling server, no
+  third-party dependency of any kind — real, direct `RTCPeerConnection`,
+  STUN-only for NAT traversal. The one real signaling exchange a new
+  connection needs (`createOfferFor`/`acceptOffer`/`completeConnection`,
+  via `signaling-codec.js`) hands back an opaque blob the caller sends
+  over whatever real out-of-band channel they choose — pasted text, a
+  QR code, an already-open connection to a third peer. This class never
+  picks or uses a channel itself.
+- **`transport.js`** — `LoopbackTransport`, a real, in-process transport
+  for deterministic tests, never for two real, separate devices. Both
+  transports implement the identical, minimal five-method contract
+  (`connect`/`disconnect`/`peers`/`send`/`broadcast` plus join/leave/
+  message handlers) — nothing above either one (`Replicator`) changes.
 - **`replicator.js`** — a real HELLO/EVENTS/ACK sync protocol: on
   connect, exchange heads; send only the real, minimal missing set
   (via `EventLog.since()`), never a full history dump.
@@ -90,12 +100,27 @@ synthetic fixture.
 
 ## Where this package's own code came from
 
-`transport.js`, `replicator.js`, and `capability.js` started as a
-direct copy of [`theodoreyong9/record`](https://github.com/theodoreyong9/record)
-— an existing, tested foundation elsewhere in this portfolio, used as
-a reference rather than reinvented from scratch. Record is not one of
+`replicator.js` and `capability.js` started as a direct copy of
+[`theodoreyong9/record`](https://github.com/theodoreyong9/record) — an
+existing, tested foundation elsewhere in this portfolio, used as a
+reference rather than reinvented from scratch. Record is not one of
 this stack's own repos, so its code lives here as this package's own
-files, not as a live dependency.
+files, not as a live dependency. `webrtc-transport.js` and
+`signaling-codec.js` are new, written for this package: Record's own
+`transport.js` used Trystero (a real, third-party P2P library) —
+deliberately not carried over. See "No Trystero" below.
+
+## No Trystero
+
+Trystero (and by extension its Nostr relay dependency) has been
+removed entirely — not made optional, removed. `WebrtcTransport` is
+our own, from-scratch, relay-free implementation of the same transport
+contract. The real, remaining open question this doesn't yet answer is
+bootstrap: a brand-new peer with zero existing connections still needs
+some real, out-of-band way to exchange that very first offer/answer
+pair with someone (see "What this does NOT yet prove" above) — that's
+a genuinely separate problem from "which library sends the bytes,"
+deliberately not hidden behind this transport's own removal of Trystero.
 
 ## Why "graph," not "GUN-compatible"
 
@@ -105,21 +130,26 @@ Checked against the actual `YourMinedApp` codebase before building
 anything: **it doesn't use GUN at all** — its current data model is
 flat `localStorage` keys, namespaced per sphere by string prefix
 (`ym_s|<sphere>|<key>`), synced over raw Trystero/Nostr message
-broadcasts, not CRDT graph replication. There is no existing GUN API
-surface to be a drop-in replacement for in this portfolio today.
-`GraphStore` is built for what "graph" in the platform's own charter
-actually means — genuinely nested, reference-capable data — not as
-compatibility shimming for a dependency that isn't in use.
+broadcasts (also since removed — see "No Trystero"), not CRDT graph
+replication. There is no existing GUN API surface to be a drop-in
+replacement for in this portfolio today. `GraphStore` is built for
+what "graph" in the platform's own charter actually means — genuinely
+nested, reference-capable data — not as compatibility shimming for a
+dependency that isn't in use.
 
 ## Honest limits
 
-`TrysteroTransport` has never been exercised with two real, live
-browser tabs in this session — the identical limit stated for it
-wherever this code has lived before.
+`RTCPeerConnection` doesn't exist in Node, so `webrtc-transport.js`'s
+own real network path (ICE negotiation, real SDP, real data flow) has
+no meaningful automated test here — `webrtc-transport.test.mjs` covers
+this class's own real connection bookkeeping and validation logic
+against a minimal, deliberately fake `RTCPeerConnection`, not the real
+network path. Not yet exercised with two real, live browser tabs in
+this session.
 
 ## Status
 
-29 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+52 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing
