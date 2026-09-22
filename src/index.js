@@ -15,3 +15,4 @@ export { GuardedDataStore } from './guarded-data-store.js';
 export { GraphStore } from './graph-store.js';
 export { graphMaterializer, ref, isRef } from './graph-materializer.js';
 export { assertCapability } from './capability-guard.js';
+export { publishBundle, readBundle, latestBundle } from './bundle.js';

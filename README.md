@@ -33,9 +33,60 @@ for the event/identity/storage substrate (`EventLog`, `Identity`,
   match plain `DataStore`'s own behavior. `transact()` is refused
   outright rather than silently producing kv-shaped sub-events this
   store's own materializer would never recognize.
+- **`bundle.js`** — publishing a real, *multi-file* application bundle
+  (an entire app: `index.html`, `css/`, `js/`) as verifiable,
+  content-addressed AIWA events — `contract-registry.js`'s single-file
+  pattern (in `aiwa-core`) generalized to a real app. `publishBundle`
+  content-addresses every file independently (parentless,
+  `createdAt=0`, so a byte-identical file across two versions reuses
+  the exact same event and is never retransmitted) plus one real,
+  signed, timestamped manifest event listing every file's own event id
+  and chaining from the domain's prior heads, so `EventLog.head()`
+  naturally resolves to the latest published version and `since()`
+  naturally computes the minimal real update. `readBundle`/
+  `latestBundle` reconstruct a full, byte-for-byte-verified bundle
+  from a manifest — every event involved was already cryptographically
+  verified on `EventLog.append()`, this only reassembles.
 
 A "sphere" in this stack is simply an `aiwa-core` `domain` — nothing
 new was needed to represent one.
+
+## Publishing an app bundle instead of GitHub Pages
+
+`examples/publish-jobber.mjs` is a real, runnable proof of concept:
+reads Jobber's actual deployed bundle (every real `.html`/`.css`/`.js`
+file, excluding this repo's own test/tooling directories) from a real
+checkout, publishes it via `publishBundle`, reads it back via
+`readBundle`, and verifies every file byte-for-byte. Run against the
+real `Jobber` repo in this portfolio:
+
+```
+node examples/publish-jobber.mjs /path/to/Jobber
+```
+
+Real, measured result: 35 files, 420,753 bytes, published in ~250ms,
+read back byte-for-byte identical in <1ms, and republishing the exact
+same content as a new "version" grows the log by exactly one event —
+the new manifest — never the 35 unchanged files again.
+
+**What this proves**: the publish → verify → reconstruct mechanism is
+real and correct against a genuine, non-toy application, not a
+synthetic fixture.
+
+**What this does NOT yet prove** (the next real steps, not done here):
+- Actual peer-to-peer replication between two separate processes/tabs
+  — this run is in-process, one `EventLog`, no `Transport`/`Replicator`
+  involved yet.
+- How a browser actually *serves and runs* a reconstructed bundle — a
+  service worker reading from an EventLog-backed cache is the likely
+  shape (the same pattern this portfolio's existing PWA service
+  workers already use for offline caching, just sourcing content from
+  AIWA-synced events instead of a `fetch()` to an origin server), but
+  it isn't built yet.
+- How a brand-new peer with zero existing connections bootstraps its
+  very first contact with no fixed hosting at all — a real, physical
+  constraint (a browser can't run code it hasn't fetched from
+  *somewhere*), deliberately deferred rather than hand-waved.
 
 ## Where this package's own code came from
 
@@ -68,7 +119,7 @@ wherever this code has lived before.
 
 ## Status
 
-21 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+29 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing
