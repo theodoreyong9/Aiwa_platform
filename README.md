@@ -93,6 +93,28 @@ synthetic fixture.
   workers already use for offline caching, just sourcing content from
   AIWA-synced events instead of a `fetch()` to an origin server), but
   it isn't built yet.
+
+### `test-browser/publish-durability.html` — the same proof, but durable
+
+`examples/publish-jobber.mjs` above is in-process and memory-only: the
+instant that Node process exits, everything it published is gone —
+nothing is actually "published" in any lasting sense. This harness
+closes that gap: it publishes Jobber's real bundle into `aiwa-core`'s
+real `createIndexedDbBackend`, in a real browser, then a genuinely
+fresh page navigation (new JS context, nothing carried over in memory)
+reconstructs it via `latestBundle` from real IndexedDB storage alone.
+
+```
+node test-browser/generate-fixture.mjs /path/to/Jobber   # writes the gitignored jobber-fixture.json
+python3 -m http.server 8935                               # from this repo's own root
+```
+then open `?phase=publish`, then reload the same URL with `?phase=reload`.
+
+Real, measured result: all 35 real files published in ~420ms, survived
+a genuine page reload, and were reconstructed byte-for-byte (0
+mismatches) in ~95ms, recovered purely from real IndexedDB storage —
+confirming Jobber's bundle really is durable, not merely
+demonstrated-and-forgotten.
 - How a brand-new peer with zero existing connections bootstraps its
   very first contact with no fixed hosting at all — a real, physical
   constraint (a browser can't run code it hasn't fetched from

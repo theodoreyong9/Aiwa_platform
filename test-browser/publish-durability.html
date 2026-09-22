@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>aiwa-platform: real, durable bundle publish</title>
+<script type="importmap">
+{ "imports": {
+  "aiwa-core": "/node_modules/aiwa-core/src/index.js",
+  "@noble/curves/ed25519.js": "/node_modules/@noble/curves/ed25519.js",
+  "@noble/hashes/utils.js": "/node_modules/@noble/hashes/utils.js",
+  "@noble/hashes/sha2.js": "/node_modules/@noble/hashes/sha2.js"
+} }
+</script>
+</head>
+<body>
+<!--
+  The real, combined proof: publishBundle()/latestBundle() against
+  aiwa-core's own real IndexedDB backend, in a real browser, with
+  Jobber's own real deployed files (see jobber-fixture.json, generated
+  from a real Jobber checkout) — not synthetic strings, not memory-only.
+
+  Needs a real static file server, rooted at this repo's own root:
+    python3 -m http.server 8935
+  then open ?phase=publish, then reload with ?phase=reload.
+-->
+<pre id="result">running...</pre>
+<script type="module">
+  import { EventLog, createIndexedDbBackend, generateIdentity } from 'aiwa-core';
+  import { publishBundle, latestBundle } from '../src/bundle.js';
+
+  const resultEl = document.getElementById('result');
+  const phase = new URLSearchParams(location.search).get('phase') || 'publish';
+
+  async function run() {
+    const backend = createIndexedDbBackend('aiwa-platform-jobber-durability-check');
+    const log = new EventLog(backend);
+
+    if (phase === 'publish') {
+      const files = await fetch('./jobber-fixture.json').then((r) => r.json());
+      const identity = await generateIdentity();
+      const t0 = performance.now();
+      const { manifestEventId } = await publishBundle(identity, log, 'jobber', { name: 'jobber', version: '1.0.0', files });
+      const publishMs = performance.now() - t0;
+      window.__result = { phase: 'publish', manifestEventId, fileCount: files.length, publishMs, logSize: (await backend.allIds()).length };
+    } else {
+      // A genuinely fresh page navigation — new JS context, nothing
+      // carried over. A brand-new EventLog, backend, and DataStore
+      // machinery reconstruct the real bundle purely from real
+      // IndexedDB storage.
+      const t0 = performance.now();
+      const bundle = await latestBundle(log, 'jobber');
+      const readMs = performance.now() - t0;
+      if (!bundle) { window.__result = { phase: 'reload', error: 'no bundle found — persistence failed' }; }
+      else {
+        const originalFiles = await fetch('./jobber-fixture.json').then((r) => r.json());
+        let mismatches = 0;
+        for (const f of originalFiles) if (bundle.files[f.path] !== f.content) mismatches++;
+        window.__result = {
+          phase: 'reload', version: bundle.version, fileCount: Object.keys(bundle.files).length,
+          readMs, mismatches, logSize: (await backend.allIds()).length,
+        };
+      }
+    }
+    resultEl.textContent = JSON.stringify(window.__result, null, 2);
+  }
+
+  run().catch((err) => {
+    window.__result = { error: String((err && err.stack) || err) };
+    resultEl.textContent = JSON.stringify(window.__result, null, 2);
+  });
+</script>
+</body>
+</html>
