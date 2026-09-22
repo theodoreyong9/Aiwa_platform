@@ -64,6 +64,15 @@ for the event/identity/storage substrate (`EventLog`, `Identity`,
   `latestBundle`'s real, IndexedDB-reconstructed content, instead of
   the network. See `test-browser/sw-serve-check.html` below for the
   real, live proof.
+- **`introducer.js`** — the real, solvable part of "the bootstrap
+  problem" (see below): `Introducer` lets a peer with just ONE real
+  connection ask that peer to introduce it to one of its OTHER real
+  peers — a real WebRTC offer/answer relayed over the two already-open
+  connections, exactly the way a person introduces two friends who
+  don't know each other. Once introduced, the two have a genuinely
+  DIRECT connection; the mediator is no longer in that connection's
+  data path at all. Zero fixed server, zero directory, ever — only
+  ever grows an existing connection, never creates the first one.
 
 A "sphere" in this stack is simply an `aiwa-core` `domain` — nothing
 new was needed to represent one.
@@ -90,17 +99,20 @@ the new manifest — never the 35 unchanged files again.
 real and correct against a genuine, non-toy application, not a
 synthetic fixture.
 
-**What this does NOT yet prove** (the next real step, not done here):
-- How a brand-new peer with zero existing connections bootstraps its
-  very first contact with no fixed hosting at all — a real, physical
-  constraint (a browser can't run code it hasn't fetched from
-  *somewhere*), deliberately deferred rather than hand-waved.
+**What this does NOT prove, and never will** (a real, physical
+constraint, not a missing feature — see "The bootstrap problem" below):
+how a brand-new peer with zero existing connections gets its very
+first real contact with no fixed hosting at all. `introducer.js` below
+solves the part of this that's actually solvable — growing a network
+from one connection — but the very first connection of all is
+irreducible.
 
-Two items that used to be on this list no longer are: actual
+Three items that used to be on this list no longer are: actual
 peer-to-peer replication between two separate, real browser tabs (see
-`test-browser/sandbox.html` below), and how a browser actually *serves
-and runs* a reconstructed bundle (see `test-browser/sw-serve-check.html`
-below).
+`test-browser/sandbox.html` below), how a browser actually *serves and
+runs* a reconstructed bundle (see `test-browser/sw-serve-check.html`
+below), and growing a network from one connection with zero fixed
+server (see "The bootstrap problem" below).
 
 ### `test-browser/publish-durability.html` — the same proof, but durable
 
@@ -206,12 +218,11 @@ deliberately not carried over. See "No Trystero" below.
 Trystero (and by extension its Nostr relay dependency) has been
 removed entirely — not made optional, removed. `WebrtcTransport` is
 our own, from-scratch, relay-free implementation of the same transport
-contract. The real, remaining open question this doesn't yet answer is
-bootstrap: a brand-new peer with zero existing connections still needs
-some real, out-of-band way to exchange that very first offer/answer
-pair with someone (see "What this does NOT yet prove" above) — that's
-a genuinely separate problem from "which library sends the bytes,"
-deliberately not hidden behind this transport's own removal of Trystero.
+contract. See "The bootstrap problem" below for what growing a real
+network from there still needs, and what `introducer.js` does and
+doesn't solve about it — a genuinely separate problem from "which
+library sends the bytes," deliberately not hidden behind this
+transport's own removal of Trystero.
 
 ## Why "graph," not "GUN-compatible"
 
@@ -270,6 +281,45 @@ failure mode, so a bounded wait is the correct behavior in general.
 Regression-tested in `webrtc-transport.test.mjs` against a fake PC whose
 `iceGatheringState` never reaches `'complete'`.
 
+## The bootstrap problem
+
+A brand-new peer, or a brand-new network with nobody in it yet, has a
+real, physical problem: a browser can't run code it hasn't fetched
+from *somewhere*, and can't connect to a peer it has no way to reach.
+No P2P system of any kind escapes this — BitTorrent needs a magnet
+link or a tracker from somewhere, a DHT needs bootstrap nodes, Bitcoin
+needs seed node addresses — it isn't specific to AIWA, and isn't solved
+here. What genuinely *is* solvable, and is solved by `introducer.js`:
+once a peer has gotten its very first real connection by ANY real,
+out-of-band means (a pasted link, a QR code, in person —
+`webrtc-transport.js`'s own `createOfferFor`/`acceptOffer` deliberately
+never picks that channel itself), it never needs another fixed
+rendezvous point again. `Introducer` lets it ask that one connection to
+introduce it to another, which introduces it to another, and so on —
+the network grows by relayed introduction alone, with zero server, zero
+directory, ever, after that first out-of-band step.
+
+`test/introducer.test.mjs` covers the real protocol logic (who gets
+asked, who relays what to whom, including a genuine race a live run
+surfaced: two independent real connections give no guaranteed relative
+message order, so a relayed offer can arrive before the "you're being
+introduced" message that explains it — handled by buffering it until
+that message arrives, not by assuming an ordering no real network
+guarantees).
+
+**Real, confirmed result** (Playwright + real Chromium, three real,
+separate browser tabs A/M/P): A and M established a real WebRTC
+connection, M and P established a real WebRTC connection, and A and P
+had never heard of each other. A then asked M — its only real
+connection — to introduce it to one of M's other real peers, purely
+via `Introducer`'s relay over the two already-open real data channels.
+The introduction resolved with A connected to P; after M's own
+transport was disconnected entirely, A and P still exchanged a real
+message directly — proof the resulting connection is genuinely direct,
+not still routed through the mediator. Zero fixed server, zero
+directory, at any point after the initial two out-of-band A↔M and M↔P
+connections.
+
 ## Honest limits
 
 The real, two-tab WebRTC path above was exercised only on the same
@@ -280,7 +330,7 @@ that would be needed to exercise it.
 
 ## Status
 
-64 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+69 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing
