@@ -1,0 +1,17 @@
+{
+  "name": "aiwa-platform",
+  "version": "0.1.0",
+  "description": "Distributed infrastructure: transport, replication, permissions, and a graph-shaped data store built on @aiwa/record — the shared floor a GUN.js-style API and its own legacy GUN adapter both sit on.",
+  "type": "module",
+  "license": "MIT",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@aiwa/record": "github:theodoreyong9/record"
+  }
+}
