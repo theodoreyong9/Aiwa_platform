@@ -84,15 +84,19 @@ real and correct against a genuine, non-toy application, not a
 synthetic fixture.
 
 **What this does NOT yet prove** (the next real steps, not done here):
-- Actual peer-to-peer replication between two separate processes/tabs
-  — this run is in-process, one `EventLog`, no `Transport`/`Replicator`
-  involved yet.
 - How a browser actually *serves and runs* a reconstructed bundle — a
   service worker reading from an EventLog-backed cache is the likely
   shape (the same pattern this portfolio's existing PWA service
   workers already use for offline caching, just sourcing content from
   AIWA-synced events instead of a `fetch()` to an origin server), but
   it isn't built yet.
+- How a brand-new peer with zero existing connections bootstraps its
+  very first contact with no fixed hosting at all — a real, physical
+  constraint (a browser can't run code it hasn't fetched from
+  *somewhere*), deliberately deferred rather than hand-waved.
+
+Actual peer-to-peer replication between two separate, real browser
+tabs is no longer on this list — see `test-browser/sandbox.html` below.
 
 ### `test-browser/publish-durability.html` — the same proof, but durable
 
@@ -115,10 +119,14 @@ a genuine page reload, and were reconstructed byte-for-byte (0
 mismatches) in ~95ms, recovered purely from real IndexedDB storage —
 confirming Jobber's bundle really is durable, not merely
 demonstrated-and-forgotten.
-- How a brand-new peer with zero existing connections bootstraps its
-  very first contact with no fixed hosting at all — a real, physical
-  constraint (a browser can't run code it hasn't fetched from
-  *somewhere*), deliberately deferred rather than hand-waved.
+
+This run only ever published one version before reloading, which is
+exactly why it didn't catch a real bug in `aiwa-core`'s
+`EventLog.head()`: a *second* real version published before a restart
+made `latestBundle()` throw a false "real fork" error on reload — see
+`aiwa-core`'s README for the bug and `test/bundle.test.mjs`'s dedicated
+regression test here for the exact scenario. Fixed upstream; this
+package's own `aiwa-core` dependency has been updated to the fix.
 
 ## Where this package's own code came from
 
@@ -211,7 +219,7 @@ that would be needed to exercise it.
 
 ## Status
 
-54 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+55 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing

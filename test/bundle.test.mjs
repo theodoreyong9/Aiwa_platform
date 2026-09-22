@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateIdentity, EventLog } from 'aiwa-core';
+import { generateIdentity, EventLog, createMemoryBackend } from 'aiwa-core';
 import { publishBundle, readBundle, latestBundle } from '../src/bundle.js';
 
 test('publish/read round-trips a real, multi-file bundle', async () => {
@@ -112,6 +112,27 @@ test('readBundle returns null (an honest "not fully synced"), never a corrupted 
   await partialLog.append(aEvent);
   // manifestEvent itself can't even be appended yet (missing parent b.js) — appendMany would throw; readBundle must be given the id regardless and handle it gracefully.
   assert.equal(await readBundle(partialLog, manifestEventId), null);
+});
+
+// Regression test for a real EventLog.head() bug (fixed in aiwa-core):
+// a fresh EventLog constructed over an already-populated real backend
+// — exactly what a service worker restart or a page reload does
+// against real IndexedDB — used to report every past manifest as a
+// "head" too, not just the latest one, so latestBundle() threw a false
+// "real fork" error after any restart of a domain with more than one
+// real, linearly-published version. Two real versions, then a brand
+// new EventLog over the same backend, must still resolve cleanly.
+test('latestBundle resolves the real latest version from a FRESH EventLog instance after a restart, even with real prior versions in history', async () => {
+  const identity = await generateIdentity();
+  const backend = createMemoryBackend(); // stands in for a real, persisted backend surviving a restart
+  const sessionOne = new EventLog(backend);
+  await publishBundle(identity, sessionOne, 'jobber', { name: 'jobber', version: '1.0.0', files: [{ path: 'a.js', content: 'v1' }] });
+  await publishBundle(identity, sessionOne, 'jobber', { name: 'jobber', version: '2.0.0', files: [{ path: 'a.js', content: 'v2' }] });
+
+  const sessionTwo = new EventLog(backend); // a brand-new instance, same real backend — this is the "restart"
+  const bundle = await latestBundle(sessionTwo, 'jobber');
+  assert.equal(bundle.version, '2.0.0');
+  assert.equal(bundle.files['a.js'], 'v2');
 });
 
 test('a bundle with no real files still produces a valid, readable manifest', async () => {
