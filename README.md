@@ -5,6 +5,47 @@ graph-shaped data store. Depends on [`aiwa-core`](https://github.com/theodoreyon
 for the event/identity/storage substrate (`EventLog`, `Identity`,
 `DataStore`) — the sibling repo in this stack, not an outside project.
 
+## Where this sits
+
+```
+          ┌────────────────────────────────────────────────┐
+          │ AIWA_project                                   │
+          │ one concrete deployment (a single static page, │
+          │ no build step, no fixed server)                │
+          └────────────────────────────────────────────────┘
+                                   │
+                                   │  imports all three, directly
+                                   ▼
+              ┌─────────────────────────────────────┐
+              ▼                                     ▼
+┌───────────────────────────┐      ┌─────────────────────────────────┐
+│ aiwa-lib                  │      │ aiwa-platform  <-- you are here │
+│ public wallet API (AIWA), │      │ transport, replication,         │
+│ Channel, contract SDK     │      │ capability-gated storage,       │
+│                           │      │ bundle publishing               │
+└───────────────────────────┘      └─────────────────────────────────┘
+              │                                     │
+              └──────────────────┬──────────────────┘
+                                 ▼
+         ┌──────────────────────────────────────────────┐
+         │ aiwa-core                                    │
+         │ the protocol itself: identity, event log,    │
+         │ progression, accrual, conservation, Mirror,  │
+         │ Causal Tick, contracts, delegation, vouchers │
+         │                                              │
+         │ depends on nothing of its own - only         │
+         │ @noble/curves, @noble/hashes, @scure/bip39,  │
+         │ optional @solana/web3.js                     │
+         └──────────────────────────────────────────────┘
+```
+
+This package has NO protocol logic of its own — it never decides what
+counts as a valid state transition (that's `aiwa-core` alone). It only
+moves and stores real, already-signed `aiwa-core` events: over the
+wire (`webrtc-transport.js`, `replicator.js`), or into a real,
+capability-gated or graph-shaped local store (`capability.js`,
+`GuardedDataStore`, `GraphStore`).
+
 ## What this package owns
 
 - **`webrtc-transport.js`** — `WebrtcTransport`: our own, relay-free
@@ -57,6 +98,11 @@ for the event/identity/storage substrate (`EventLog`, `Identity`,
   `latestBundle` reconstruct a full, byte-for-byte-verified bundle
   from a manifest — every event involved was already cryptographically
   verified on `EventLog.append()`, this only reassembles.
+  `listBundlesByAuthor` finds every domain (across every real
+  `bundle.manifest` event in the log) published by a given author id —
+  no new protocol needed, since `event.author` is already
+  cryptographically verified on every append; this only scans and
+  summarizes what was already, verifiably true.
 - **`serve-worker.js`** — the piece that turns "a bundle was published
   and can be reconstructed" into "a browser can actually run it": a
   real service worker fetch handler (`createFetchHandler`) that
@@ -330,7 +376,7 @@ that would be needed to exercise it.
 
 ## Status
 
-69 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+72 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing
