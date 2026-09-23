@@ -88,3 +88,32 @@ export async function latestBundle(log, domain) {
   if (manifests.length > 1) throw new Error(`Multiple, unresolved manifest heads for domain '${domain}' — a real fork (${manifests.map((m) => m.id).join(', ')}); the caller must resolve which to trust.`);
   return readBundle(log, manifests[0].id);
 }
+
+/**
+ * Every real, published version whose manifest was really signed by
+ * `author` — "find published code by its creator's real address"
+ * needs no new protocol: every event's `author` is already a real,
+ * cryptographically verified field (aiwa-core's own event.js), so this
+ * just scans for it. Returns manifest SUMMARIES (domain, name,
+ * version, manifestEventId, createdAt), not full file content — the
+ * caller resolves whichever ones it actually wants to open via
+ * readBundle()/latestBundle(). Every version this author ever
+ * published is included, not just the current head per domain — a
+ * real publish history, not a directory of "latest only"; the caller
+ * decides what "current" means for its own listing.
+ */
+export async function listBundlesByAuthor(log, author) {
+  const results = [];
+  for await (const event of log.since([])) {
+    if (event.type === 'bundle.manifest' && event.author === author) {
+      results.push({
+        domain: event.domain,
+        manifestEventId: event.id,
+        name: event.payload.name,
+        version: event.payload.version,
+        createdAt: event.createdAt,
+      });
+    }
+  }
+  return results;
+}

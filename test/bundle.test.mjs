@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateIdentity, EventLog, createMemoryBackend } from 'aiwa-core';
-import { publishBundle, readBundle, latestBundle } from '../src/bundle.js';
+import { publishBundle, readBundle, latestBundle, listBundlesByAuthor } from '../src/bundle.js';
 
 test('publish/read round-trips a real, multi-file bundle', async () => {
   const identity = await generateIdentity();
@@ -141,4 +141,37 @@ test('a bundle with no real files still produces a valid, readable manifest', as
   const { manifestEventId } = await publishBundle(identity, log, 'jobber', { name: 'jobber', version: '0.0.1', files: [] });
   const bundle = await readBundle(log, manifestEventId);
   assert.deepEqual(bundle.files, {});
+});
+
+test('listBundlesByAuthor finds every real version this author published, across different domains, needing no new protocol beyond the already-verified author field', async () => {
+  const author = await generateIdentity();
+  const someoneElse = await generateIdentity();
+  const log = new EventLog();
+
+  await publishBundle(author, log, 'my-token', { name: 'my-token', version: '1.0.0', files: [{ path: 'index.html', content: 'v1' }] });
+  await publishBundle(author, log, 'my-token', { name: 'my-token', version: '2.0.0', files: [{ path: 'index.html', content: 'v2' }] });
+  await publishBundle(author, log, 'another-contract', { name: 'another-contract', version: '1.0.0', files: [{ path: 'index.html', content: 'x' }] });
+  await publishBundle(someoneElse, log, 'not-mine', { name: 'not-mine', version: '1.0.0', files: [{ path: 'index.html', content: 'y' }] });
+
+  const mine = await listBundlesByAuthor(log, author.id);
+  assert.equal(mine.length, 3, 'both real versions of my-token, plus another-contract — never someone else\'s publish');
+  assert.ok(mine.every((b) => b.domain !== 'not-mine'));
+  const myToken = mine.filter((b) => b.domain === 'my-token');
+  assert.deepEqual(myToken.map((b) => b.version).sort(), ['1.0.0', '2.0.0']);
+});
+
+test('listBundlesByAuthor returns an empty list for an author who never published anything', async () => {
+  const author = await generateIdentity();
+  const log = new EventLog();
+  assert.deepEqual(await listBundlesByAuthor(log, author.id), []);
+});
+
+test('SECURITY: listBundlesByAuthor never credits a publish to an author who did not really sign it', async () => {
+  const realAuthor = await generateIdentity();
+  const impostor = await generateIdentity();
+  const log = new EventLog();
+  await publishBundle(realAuthor, log, 'jobber', { name: 'jobber', version: '1.0.0', files: [{ path: 'a.js', content: 'x' }] });
+
+  const asImpostor = await listBundlesByAuthor(log, impostor.id);
+  assert.deepEqual(asImpostor, [], 'the impostor never signed anything — nothing is attributed to them, no matter what domain they ask about');
 });
