@@ -64,7 +64,8 @@ capability-gated or graph-shaped local store (`capability.js`,
   message handlers) — nothing above either one (`Replicator`) changes.
 - **`replicator.js`** — a real HELLO/EVENTS/ACK sync protocol: on
   connect, exchange heads; send only the real, minimal missing set
-  (via `EventLog.since()`), never a full history dump.
+  (via `EventLog.since()`), chunked and ACK-gated (see "Chunked
+  replication" below) — never one unbounded message.
 - **`capability.js`** — a signed, scoped `CapabilitySet`: an
   application never receives "access to everything," only what was
   genuinely, verifiably issued to it.
@@ -366,6 +367,54 @@ not still routed through the mediator. Zero fixed server, zero
 directory, at any point after the initial two out-of-band A↔M and M↔P
 connections.
 
+## Chunked replication — bounding an unbounded full-sync payload
+
+A real, previously-unaddressed limit (Yellow Paper §12.1): `HELLO`/
+`HELLO_ACK` handling used to collect every real missing event into one
+array and send it as a single `EVENTS` message — a domain offline a
+long time, or a brand-new peer catching up on a long real history, hit
+a real memory and bandwidth spike proportional to total history size,
+on both the sender (building the array) and the receiver (buffering it
+before one `appendMany()` call). `_sendChunked()` now sorts the real
+missing set topologically, splits it into bounded chunks (`chunkSize`,
+default 100), and releases them one at a time — the next chunk only
+once the previous chunk's own real `ACK` genuinely arrives. Real
+backpressure, not a fixed delay: a slow or momentarily disconnected
+peer simply never gets the next chunk until it catches up.
+
+**Two real bugs found closing this loop:**
+
+1. `EventLog.since()`'s own real output order is whatever the backend's
+   `allIds()` happens to return — never guaranteed parents-before-children.
+   Harmless as a single `appendMany()` call (its own internal retry loop
+   tolerates any order), but genuinely broken once split across several
+   separate `EVENTS` messages: a child delivered in an earlier chunk
+   than its real parent makes that chunk's own `appendMany()` fail
+   outright. Fixed by sorting the full missing set topologically before
+   chunking, so each chunk only ever depends on an earlier chunk or
+   something the receiver already has.
+2. The existing `HELLO`/`HELLO_ACK` exchange already computes and sends
+   "what's missing" *twice* per real connection — once handling the
+   peer's `HELLO`, again handling their own `HELLO_ACK` (same announced
+   heads both times, since nothing changes for them in between).
+   Harmless before chunking (`EventLog.append()`'s own idempotency
+   silently absorbs the redundant resend); a real bug once chunked,
+   since a second, independent `_sendChunked()` call for a peer already
+   mid-sync would clobber the first call's own pending-chunk queue and
+   put two chunks genuinely in flight at once. `_syncInFlight` skips the
+   redundant second call outright.
+
+**Honest limit**: `_syncInFlight`'s own dedup only covers the window
+while a chunked sync is actually in progress. In the narrow race where
+the very first sync completes (all chunks sent and acked) in the
+instant before the redundant `HELLO_ACK`-triggered call would have been
+skipped, that second call proceeds and harmlessly re-sends the same
+already-delivered events once more — wasted bandwidth, never incorrect
+(`EventLog.append()`'s idempotency absorbs it), and not observed in
+`test/replicator.test.mjs`'s own real runs. Eliminating it fully would
+mean redesigning the `HELLO`/`HELLO_ACK` handshake itself, out of scope
+here.
+
 ## Honest limits
 
 The real, two-tab WebRTC path above was exercised only on the same
@@ -376,7 +425,7 @@ that would be needed to exercise it.
 
 ## Status
 
-72 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+77 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing
