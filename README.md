@@ -1,5 +1,7 @@
 # aiwa-platform
 
+> **New here?** What Aiwa is and how it works end to end, in plain words: [EXPLAINED.md](https://github.com/theodoreyong9/Aiwa_project/blob/main/EXPLAINED.md) (français : [EXPLICATION.md](https://github.com/theodoreyong9/Aiwa_project/blob/main/EXPLICATION.md)).
+
 Distributed infrastructure: transport, replication, permissions, and a
 graph-shaped data store. Depends on [`aiwa-core`](https://github.com/theodoreyong9/Aiwa_core)
 for the event/identity/storage substrate (`EventLog`, `Identity`,
