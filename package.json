@@ -6,7 +6,11 @@
   "license": "MIT",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./archive-server": "./src/archive-server.js"
+  },
+  "bin": {
+    "aiwa-node": "node/aiwa-node.js"
   },
   "scripts": {
     "test": "node --test"

@@ -111,6 +111,10 @@ capability-gated or graph-shaped local store (`capability.js`,
   `latestBundle`'s real, IndexedDB-reconstructed content, instead of
   the network. See `test-browser/sw-serve-check.html` below for the
   real, live proof.
+- **`archive.js` / `archive-server.js` / `node/aiwa-node.js`** — the **archive node**, the always-on holder that makes "my
+  history is in the network" true: it keeps, per wallet, the latest *backup* (a checkpoint signed by the wallet's own
+  key, aiwa-lib's `exportBackup`) and hands it back to a wallet that logs in with its recovery phrase on a new device.
+  See "The archive node" below.
 - **`introducer.js`** — the real, solvable part of "the bootstrap
   problem" (see below): `Introducer` lets a peer with just ONE real
   connection ask that peer to introduce it to one of its OTHER real
@@ -271,6 +275,35 @@ doesn't solve about it — a genuinely separate problem from "which
 library sends the bytes," deliberately not hidden behind this
 transport's own removal of Trystero.
 
+## The archive node
+
+Blockchains solve "where is the history?" by having every node keep all of it, found through seed nodes. AIWA does not
+replicate everything (that is what keeps it light): an event is kept by its owner and by whoever received it. So after a
+lost device the recovery phrase brings the key back, not the journal — unless someone always-on holds a copy. That is
+the archive node, and it is the "seed node" of the bootstrap problem below in its simplest form: a program anyone can run.
+
+- **What it keeps.** Per wallet, the latest backup: ONE checkpoint, the wallet's state signed by its own key — small
+  however long the history. Only the owner of a key can write that key's backup (the checkpoint's envelope must verify and
+  its author must be the domain); the most recent one wins (by the checkpoint's own signed time, never one dated in the
+  future); a replayed old one changes nothing. Reads are public (a backup holds no secret: balances and mining state).
+  Limits: 256 KB a backup, 100 000 wallets, 30 writes a minute per address. One file per wallet, written atomically.
+- **The protocol** (HTTP/JSON, CORS open so pages can call it): `PUT /v1/backup`, `GET /v1/backup/<domain>`,
+  `GET /v1/status`. `archive.js` is the client (`pushBackup`, `fetchBackup`, and `pushToNodes` / `fetchFromNodes` for
+  several nodes: push to all, take the most recent answer, skip one that is down). A wallet needs no trust in a node: it
+  can neither forge a backup nor give one wallet another's (`importBackup` refuses another identity); what a node can do
+  is withhold or forget — hence several.
+- **Run one.** `node node/aiwa-node.js [--port 8787] [--data ~/aiwa-node-data] [--tunnel]`. Wallets are pages served over
+  https, so a node must be reached over https: `--tunnel` starts a Cloudflare quick tunnel (cloudflared) and prints the
+  public address to paste in the wallet (*Recovery → Archive nodes*); it changes each time the tunnel restarts. On a phone
+  under Termux:
+  `pkg install -y nodejs git cloudflared && git clone https://github.com/theodoreyong9/Aiwa_platform ~/aiwa_platform && cd ~/aiwa_platform && npm install --omit=dev && termux-wake-lock && node node/aiwa-node.js --tunnel`
+  (to update later: `cd ~/aiwa_platform && git pull && npm install --omit=dev`). A phone has no address of its own and
+  is killed when the system wants its memory: fine to try, a small always-on machine is what makes a node dependable.
+- **Not verified here:** the tunnel step (cloudflared was not available in this environment; its output is parsed for the
+  `https://….trycloudflare.com` address) and a node left running on a phone. The server, the protocol and the limits are
+  tested over real HTTP (`test/archive.test.mjs`). The server is `aiwa-platform/archive-server`, not in the package's main
+  entry, so that a browser bundle of the package never reaches for Node's own modules.
+
 ## Why "graph," not "GUN-compatible"
 
 The architecture note this package was scoped from suggested GUN.js
@@ -425,7 +458,7 @@ that would be needed to exercise it.
 
 ## Status
 
-77 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
+85 passing `node --test` cases. Depends on `aiwa-core` via its GitHub
 URL (neither is on npm yet).
 
 ## Testing

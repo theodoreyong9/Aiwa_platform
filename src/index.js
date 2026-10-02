@@ -20,3 +20,6 @@ export { graphMaterializer, ref, isRef } from './graph-materializer.js';
 export { assertCapability } from './capability-guard.js';
 export { publishBundle, readBundle, latestBundle, listBundlesByAuthor } from './bundle.js';
 export { resolveFromBundle, createFetchHandler } from './serve-worker.js';
+export { normalizeNodeUrl, pushBackup, fetchBackup, pushToNodes, fetchFromNodes } from './archive.js';
+// The node itself (archive-server.js) uses Node's own modules, so it is NOT here — a browser bundle of this package must not
+// reach for them: import it as 'aiwa-platform/archive-server'.
